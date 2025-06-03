@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file
+from flask import Flask, request
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Dispatcher, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from dotenv import load_dotenv
@@ -13,7 +13,7 @@ app = Flask(__name__)
 
 dispatcher = Dispatcher(bot=bot, update_queue=None, workers=0, use_context=True)
 
-# Función para el comando /start
+# --- Comando /start ---
 def start(update, context):
     nombre = update.effective_user.first_name
     mensaje = (
@@ -34,7 +34,7 @@ def start(update, context):
         reply_markup=InlineKeyboardMarkup(botones)
     )
 
-# Función para manejar botones
+# --- Manejo de botones ---
 def manejar_botones(update, context):
     query = update.callback_query
     data = query.data
@@ -71,11 +71,20 @@ def manejar_botones(update, context):
 
     elif data == "cv_pdf":
         file_path = "CV_Pablo Norberto Pallitto Gomez.pdf"
-        chat_id = query.message.chat_id
-        context.bot.send_document(chat_id=chat_id, document=open(file_path, 'rb'), filename="CV_Pablo Norberto Pallitto Gomez.pdf")
-        query.edit_message_text("📄 Aquí tenés mi CV en PDF.\n\n¿Querés volver al menú?", reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Volver al menú", callback_data="start")]
-        ]))
+        chat_id = query.message.chat.id
+        try:
+            with open(file_path, 'rb') as documento:
+                context.bot.send_document(chat_id=chat_id, document=documento, filename="CV_Pablo Norberto Pallitto Gomez.pdf")
+            query.edit_message_text(
+                text="📄 Aquí tenés mi CV en PDF.\n\n¿Querés volver al menú?",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Volver al menú", callback_data="start")]
+                ])
+            )
+        except FileNotFoundError:
+            query.edit_message_text(
+                text="❌ No se encontró el archivo del CV. Por favor, intentá más tarde."
+            )
 
     elif data == "servicios":
         mensaje = (
@@ -86,9 +95,13 @@ def manejar_botones(update, context):
             "- Consultoría para toma de decisiones basada en datos"
         )
 
-        query.edit_message_text(text=mensaje, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Volver al menú", callback_data="start")]
-        ]))
+        query.edit_message_text(
+            text=mensaje,
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Volver al menú", callback_data="start")]
+            ])
+        )
 
     elif data == "contacto":
         mensaje = (
@@ -99,14 +112,18 @@ def manejar_botones(update, context):
             "Estoy disponible para proyectos, consultas y colaboraciones."
         )
 
-        query.edit_message_text(text=mensaje, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Volver al menú", callback_data="start")]
-        ]))
+        query.edit_message_text(
+            text=mensaje,
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Volver al menú", callback_data="start")]
+            ])
+        )
 
     elif data == "start":
         start(update, context)
 
-# Respuesta automática para preguntas frecuentes
+# --- Respuestas automáticas ---
 def responder_texto(update, context):
     texto = update.message.text.lower()
 
@@ -124,22 +141,23 @@ def responder_texto(update, context):
 
     update.message.reply_text("🤖 No entiendo tu consulta. Por favor, usá los botones del menú o escribí /start para comenzar.")
 
-# Handlers
+# --- Handlers ---
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CallbackQueryHandler(manejar_botones))
 dispatcher.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, responder_texto))
 
-# Webhook para Telegram
+# --- Webhook para Telegram ---
 @app.route(f"/webhook/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
     dispatcher.process_update(update)
     return "OK"
 
-# Endpoint simple para probar
+# --- Endpoint raíz ---
 @app.route("/", methods=["GET"])
 def index():
     return "Bot de Pablo está funcionando."
 
+# --- Ejecutar servidor Flask ---
 if __name__ == "__main__":
     app.run(debug=True)
