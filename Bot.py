@@ -27,7 +27,48 @@ def start(update, context):
     )
     context.bot.send_message(chat_id=update.effective_chat.id, text=mensaje)
 
+def info(update, context):
+    mensaje = (
+        "👨‍💻 *Sobre mí*\n"
+        "Soy Pablo Norberto, especialista en análisis de datos con experiencia en proyectos de BI, dashboards y automatización.\n"
+        "Me apasiona transformar datos en información clara y útil para la toma de decisiones."
+    )
+    context.bot.send_message(chat_id=update.effective_chat.id, text=mensaje, parse_mode='Markdown')
+
+def cv(update, context):
+    mensaje = (
+        "📄 *Mi CV*\n"
+        "Puedes ver mi CV completo en mi sitio web:\n"
+        "https://curriculumvitae.pablopallitto.ar/\n\n"
+        "También puedo enviarte un resumen por acá si lo deseas."
+    )
+    context.bot.send_message(chat_id=update.effective_chat.id, text=mensaje, parse_mode='Markdown')
+
+def servicios(update, context):
+    mensaje = (
+        "💼 *Servicios*\n"
+        "- Análisis de datos y visualización\n"
+        "- Creación de dashboards interactivos\n"
+        "- Automatización de procesos con Python y Power BI\n"
+        "- Consultoría para toma de decisiones basada en datos"
+    )
+    context.bot.send_message(chat_id=update.effective_chat.id, text=mensaje, parse_mode='Markdown')
+
+def contacto(update, context):
+    mensaje = (
+        "📞 *Contacto*\n"
+        "Email: pablo.n.pallitto@gmail.com\n"
+        "LinkedIn: https://www.linkedin.com/in/pablo-pallitto/n"
+        "Teléfono: +54 9 11 2251-2731\n\n"
+        "Estoy disponible para proyectos, consultas y colaboraciones."
+    )
+    context.bot.send_message(chat_id=update.effective_chat.id, text=mensaje, parse_mode='Markdown')
+
 dispatcher.add_handler(CommandHandler("start", start))
+dispatcher.add_handler(CommandHandler("info", info))
+dispatcher.add_handler(CommandHandler("cv", cv))
+dispatcher.add_handler(CommandHandler("servicios", servicios))
+dispatcher.add_handler(CommandHandler("contacto", contacto))
 
 @app.route(f"/webhook/{TOKEN}", methods=["POST"])
 def webhook():
@@ -40,5 +81,4 @@ def index():
     return "Bot de Pablo está funcionando."
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Usar puerto de Render o 5000 localmente
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(debug=True)
