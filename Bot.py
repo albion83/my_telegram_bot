@@ -1,5 +1,6 @@
 import os
 import asyncio
+import threading
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -11,10 +12,12 @@ from dotenv import load_dotenv
 # --- Cargar variables de entorno ---
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
+assert TOKEN, "❌ No se encontró el TOKEN en las variables de entorno."
 
 # --- Instancias principales ---
 app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
+WEBHOOK_PATH = f"/webhook/{TOKEN}"
 
 # --- Comando /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -24,17 +27,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📊 Soy tu asistente personal para conocer más sobre mí, mis servicios en análisis de datos y cómo puedo ayudarte.\n\n"
         "Tocá los botones para navegar:"
     )
-
     botones = [
         [InlineKeyboardButton("👨‍💻 Sobre mí", callback_data="info")],
         [InlineKeyboardButton("💼 Servicios", callback_data="servicios")],
         [InlineKeyboardButton("📬 Contacto", callback_data="contacto")],
     ]
-
-    await update.message.reply_text(
-        text=mensaje,
-        reply_markup=InlineKeyboardMarkup(botones)
-    )
+    await update.message.reply_text(text=mensaje, reply_markup=InlineKeyboardMarkup(botones))
 
 # --- Manejo de botones ---
 async def manejar_botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -127,38 +125,26 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(manejar_botones))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, responder_texto))
 
-# --- Webhook route ---
-@app.route(f"/webhook/{TOKEN}", methods=["POST"])
+# --- Ruta del webhook ---
+@app.route(WEBHOOK_PATH, methods=["POST"])
 async def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
+    update_data = request.get_json(force=True)
+    update = Update.de_json(update_data, application.bot)
     await application.process_update(update)
-    return "OK"
+    return "OK", 200
 
-# --- Root test ---
+# --- Ruta raíz ---
 @app.route("/", methods=["GET"])
 def index():
-    return "Bot de Pablo está funcionando."
+    return "✅ Bot de Pablo está funcionando."
 
-# --- Inicialización manual del bot en modo webhook ---
-async def init_app():
+# --- Inicializar bot de Telegram ---
+async def run_bot():
     await application.initialize()
     await application.start()
-    print("Bot inicializado con Flask y listo para recibir webhooks.")
+    print("🤖 Bot de Telegram inicializado y escuchando Webhook.")
 
-# --- Lanzar Flask y el bot ---
+# --- Ejecutar Flask y el bot ---
 if __name__ == "__main__":
-    import threading
-
-    async def run_bot():
-        await application.initialize()
-        await application.start()
-        print("Bot inicializado correctamente.")
-
-    # Ejecutar el bot en un hilo separado
     threading.Thread(target=lambda: asyncio.run(run_bot()), daemon=True).start()
-
-    # Luego iniciar Flask
-    app.run(debug=True, use_reloader=False)
-
-
-
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
