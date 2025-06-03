@@ -147,5 +147,18 @@ async def init_app():
 
 # --- Lanzar Flask y el bot ---
 if __name__ == "__main__":
-    asyncio.run(init_app())
+    import threading
+
+    async def run_bot():
+        await application.initialize()
+        await application.start()
+        print("Bot inicializado correctamente.")
+
+    # Ejecutar el bot en un hilo separado
+    threading.Thread(target=lambda: asyncio.run(run_bot()), daemon=True).start()
+
+    # Luego iniciar Flask
     app.run(debug=True, use_reloader=False)
+
+
+
