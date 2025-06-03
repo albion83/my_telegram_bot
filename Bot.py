@@ -1,18 +1,19 @@
-from flask import Flask, request
-from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
-from dotenv import load_dotenv
 import os
 import asyncio
+from flask import Flask, request
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application, CommandHandler, CallbackQueryHandler,
+    MessageHandler, ContextTypes, filters
+)
+from dotenv import load_dotenv
 
-# Cargar variables de entorno
+# --- Cargar variables de entorno ---
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 
-# Crear app Flask
+# --- Instancias principales ---
 app = Flask(__name__)
-
-# Crear instancia del bot y Application
 application = Application.builder().token(TOKEN).build()
 
 # --- Comando /start ---
@@ -106,7 +107,7 @@ async def manejar_botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "start":
         await start(update, context)
 
-# --- Respuestas automáticas ---
+# --- Respuesta a mensajes ---
 async def responder_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.lower()
     respuestas = {
@@ -126,18 +127,27 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(manejar_botones))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, responder_texto))
 
-# --- Ruta webhook para Telegram ---
+# --- Webhook route ---
 @app.route(f"/webhook/{TOKEN}", methods=["POST"])
-def webhook():
+async def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.create_task(application.process_update(update))  # asincrónico
+    await application.process_update(update)
     return "OK"
 
-# --- Endpoint raíz ---
+# --- Root test ---
 @app.route("/", methods=["GET"])
 def index():
     return "Bot de Pablo está funcionando."
 
-# --- Ejecutar servidor Flask ---
+# --- Inicialización manual del bot en modo webhook ---
+async def main():
+    await application.initialize()
+    await application.start()
+    # No se llama `application.run_polling()` porque usamos webhooks
+    print("Bot inicializado con Flask y listo para recibir webhooks.")
+
+# --- Lanzar Flask y el bot ---
 if __name__ == "__main__":
-    app.run(debug=True)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+    app.run(debug=True, use_reloader=False)
