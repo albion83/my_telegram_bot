@@ -57,8 +57,8 @@ def servicios(update, context):
 def contacto(update, context):
     mensaje = (
         "📞 *Contacto*\n"
-        "Email: pablo.n.pallitto@gmail.com\n"
-        "LinkedIn: https://www.linkedin.com/in/pablo-pallitto/n"
+        "Email: pablo.pallitto@gmail.com\n"
+        "LinkedIn: https://www.linkedin.com/in/pablo-pallitto\n\n"
         "Teléfono: +54 9 11 2251-2731\n\n"
         "Estoy disponible para proyectos, consultas y colaboraciones."
     )
