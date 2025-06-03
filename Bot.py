@@ -1,20 +1,22 @@
 from flask import Flask, request
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Dispatcher, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 from dotenv import load_dotenv
 import os
+import asyncio
 
 # Cargar variables de entorno
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 
-bot = Bot(token=TOKEN)
+# Crear app Flask
 app = Flask(__name__)
 
-dispatcher = Dispatcher(bot=bot, update_queue=None, workers=0, use_context=True)
+# Crear instancia del bot y Application
+application = Application.builder().token(TOKEN).build()
 
 # --- Comando /start ---
-def start(update, context):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     nombre = update.effective_user.first_name
     mensaje = (
         f"Hola {nombre}, ¡bienvenido a Pablo Analytics Bot! 👋\n\n"
@@ -28,17 +30,16 @@ def start(update, context):
         [InlineKeyboardButton("📬 Contacto", callback_data="contacto")],
     ]
 
-    context.bot.send_message(
-        chat_id=update.effective_chat.id,
+    await update.message.reply_text(
         text=mensaje,
         reply_markup=InlineKeyboardMarkup(botones)
     )
 
 # --- Manejo de botones ---
-def manejar_botones(update, context):
+async def manejar_botones(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
-    query.answer()
+    await query.answer()
 
     if data == "info":
         mensaje = (
@@ -47,21 +48,15 @@ def manejar_botones(update, context):
             "Me apasiona transformar datos en información clara y útil para la toma de decisiones.\n\n"
             "🧾 ¿Querés ver más sobre mi perfil?"
         )
-
         botones_info = [
             [InlineKeyboardButton("🌐 Ver CV Web", callback_data="cv_web")],
             [InlineKeyboardButton("⬇️ Descargar CV PDF", callback_data="cv_pdf")],
             [InlineKeyboardButton("🔙 Volver al menú", callback_data="start")]
         ]
-
-        query.edit_message_text(
-            text=mensaje,
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup(botones_info)
-        )
+        await query.edit_message_text(text=mensaje, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(botones_info))
 
     elif data == "cv_web":
-        query.edit_message_text(
+        await query.edit_message_text(
             text="🌐 Podés ver mi CV online en:\nhttps://curriculumvitae.pablopallitto.ar",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬇️ Descargar CV PDF", callback_data="cv_pdf")],
@@ -74,17 +69,15 @@ def manejar_botones(update, context):
         chat_id = query.message.chat.id
         try:
             with open(file_path, 'rb') as documento:
-                context.bot.send_document(chat_id=chat_id, document=documento, filename="CV_Pablo Norberto Pallitto Gomez.pdf")
-            query.edit_message_text(
+                await context.bot.send_document(chat_id=chat_id, document=documento, filename="CV_Pablo Norberto Pallitto Gomez.pdf")
+            await query.edit_message_text(
                 text="📄 Aquí tenés mi CV en PDF.\n\n¿Querés volver al menú?",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Volver al menú", callback_data="start")]
                 ])
             )
         except FileNotFoundError:
-            query.edit_message_text(
-                text="❌ No se encontró el archivo del CV. Por favor, intentá más tarde."
-            )
+            await query.edit_message_text("❌ No se encontró el archivo del CV. Por favor, intentá más tarde.")
 
     elif data == "servicios":
         mensaje = (
@@ -94,14 +87,9 @@ def manejar_botones(update, context):
             "- Automatización de procesos con Python y Power BI\n"
             "- Consultoría para toma de decisiones basada en datos"
         )
-
-        query.edit_message_text(
-            text=mensaje,
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Volver al menú", callback_data="start")]
-            ])
-        )
+        await query.edit_message_text(text=mensaje, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Volver al menú", callback_data="start")]
+        ]))
 
     elif data == "contacto":
         mensaje = (
@@ -111,46 +99,38 @@ def manejar_botones(update, context):
             "Teléfono: +54 9 11 2251-2731\n"
             "Estoy disponible para proyectos, consultas y colaboraciones."
         )
-
-        query.edit_message_text(
-            text=mensaje,
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Volver al menú", callback_data="start")]
-            ])
-        )
+        await query.edit_message_text(text=mensaje, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Volver al menú", callback_data="start")]
+        ]))
 
     elif data == "start":
-        start(update, context)
+        await start(update, context)
 
 # --- Respuestas automáticas ---
-def responder_texto(update, context):
+async def responder_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.lower()
-
     respuestas = {
         "herramientas": "🛠️ Trabajo principalmente con Power BI, Python, SQL y Excel.",
         "experiencia": "📌 Tengo experiencia en análisis de datos para negocios, automatización de reportes y creación de dashboards para distintas industrias.",
         "trabajaste": "🏢 He colaborado con empresas de servicios, tecnología y retail. ¿Querés saber más sobre algún proyecto específico?",
         "proyectos": "🚀 Estoy disponible para nuevos proyectos. Si tenés algo en mente, ¡escribime!"
     }
-
     for keyword, respuesta in respuestas.items():
         if keyword in texto:
-            update.message.reply_text(respuesta)
+            await update.message.reply_text(respuesta)
             return
+    await update.message.reply_text("🤖 No entiendo tu consulta. Por favor, usá los botones del menú o escribí /start para comenzar.")
 
-    update.message.reply_text("🤖 No entiendo tu consulta. Por favor, usá los botones del menú o escribí /start para comenzar.")
+# --- Añadir handlers ---
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CallbackQueryHandler(manejar_botones))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, responder_texto))
 
-# --- Handlers ---
-dispatcher.add_handler(CommandHandler("start", start))
-dispatcher.add_handler(CallbackQueryHandler(manejar_botones))
-dispatcher.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, responder_texto))
-
-# --- Webhook para Telegram ---
+# --- Ruta webhook para Telegram ---
 @app.route(f"/webhook/{TOKEN}", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    dispatcher.process_update(update)
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    asyncio.create_task(application.process_update(update))  # asincrónico
     return "OK"
 
 # --- Endpoint raíz ---
