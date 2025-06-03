@@ -140,14 +140,12 @@ def index():
     return "Bot de Pablo está funcionando."
 
 # --- Inicialización manual del bot en modo webhook ---
-async def main():
+async def init_app():
     await application.initialize()
     await application.start()
-    # No se llama `application.run_polling()` porque usamos webhooks
     print("Bot inicializado con Flask y listo para recibir webhooks.")
 
 # --- Lanzar Flask y el bot ---
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    asyncio.run(init_app())
     app.run(debug=True, use_reloader=False)
