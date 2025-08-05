@@ -1,105 +1,56 @@
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters, ConversationHandler
-)
-from google_sheets import save_interaction
+import time
 from dotenv import load_dotenv
+from telegram import Update
+from telegram.ext import (
+    Application, CommandHandler, CallbackQueryHandler, ContextTypes
+)
+from handlers import start, callbacks, cv
 
-load_dotenv()
+if os.path.exists(".env"):
+    load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
-
 if not TOKEN:
-    raise ValueError("❌ No se encontró el token de Telegram. Definí BOT_TOKEN en el entorno o en .env.")
+    raise ValueError("No se encontró la variable de entorno BOT_TOKEN")
 
-# Estados para el ConversationHandler
-ESPERANDO_CONTACTO = 1
+TIMEOUT = 600  # 10 minutos en segundos
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = (
-        "¡Hola! 👋\n"
-        "Soy el bot de Pablo Pallitto. Podés consultarme sobre mi experiencia, ver mi portfolio o dejarme tu contacto.\n\n"
-        "📬 Elegí una opción o escribime un mensaje directamente."
-    )
+async def check_inactivity(context: ContextTypes.DEFAULT_TYPE):
+    current_time = time.time()
+    users_to_remove = []
+    for user_id, last_time in context.bot_data.get("last_active", {}).items():
+        if current_time - last_time > TIMEOUT:
+            users_to_remove.append(user_id)
 
-    keyboard = [
-        [InlineKeyboardButton("📄 Ver experiencia", callback_data="experiencia")],
-        [InlineKeyboardButton("🖼️ Ver portfolio", callback_data="portfolio")],
-        [InlineKeyboardButton("📬 Dejar contacto", callback_data="contacto")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    for user_id in users_to_remove:
+        context.bot_data["last_active"].pop(user_id, None)
+        # Opcional: enviar mensaje o hacer algo con user_id
+        # await context.bot.send_message(chat_id=user_id, text="⏰ La conversación terminó por inactividad.")
 
-    await update.message.reply_text(msg, reply_markup=reply_markup)
+async def update_user_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if "last_active" not in context.bot_data:
+        context.bot_data["last_active"] = {}
+    context.bot_data["last_active"][user_id] = time.time()
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+def main():
+    application = Application.builder().token(TOKEN).build()
 
-    if query.data == "experiencia":
-        await query.edit_message_text(
-            "📄 Pablo tiene experiencia en análisis de datos, desarrollo en Power BI y automatización de procesos con Power Platform.\n\n"
-            "Volvé al menú con /start"
-        )
-    elif query.data == "portfolio":
-        await query.edit_message_text(
-            "🖼️ Podés ver el portfolio completo de Pablo en: https://tulink.com\n\n"
-            "Volvé al menú con /start"
-        )
-    elif query.data == "contacto":
-        await query.edit_message_text("✍️ Por favor, escribime tu nombre, email y mensaje para dejar tu contacto.")
-        return ESPERANDO_CONTACTO  # Cambio de estado para esperar el mensaje
+    # Handlers principales
+    application.add_handler(CommandHandler("start", start.start_command))
+    application.add_handler(CallbackQueryHandler(callbacks.button_handler))
+    application.add_handler(CommandHandler("cv", cv.cv_command))  # comandos directos si quieres
 
-    return ConversationHandler.END
+    # Actualizar actividad del usuario en grupo 1 (prioridad menor)
+    application.add_handler(CallbackQueryHandler(update_user_activity), group=1)
+    application.add_handler(CommandHandler("start", update_user_activity), group=1)
 
-async def recibir_contacto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    mensaje = update.message.text
+    # Job que chequea inactividad cada minuto
+    application.job_queue.run_repeating(check_inactivity, interval=60, first=60)
 
-    save_interaction(
-        nombre=user.full_name,
-        username=user.username,
-        user_id=user.id,
-        mensaje=mensaje
-    )
+    print("✅ Bot iniciado correctamente. Esperando mensajes...")
+    application.run_polling()
 
-    await update.message.reply_text("✅ ¡Gracias! Tu mensaje fue guardado. Volvé al menú con /start")
-
-    return ConversationHandler.END
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Mensaje general fuera de conversación
-    user = update.effective_user
-    mensaje = update.message.text
-
-    save_interaction(
-        nombre=user.full_name,
-        username=user.username,
-        user_id=user.id,
-        mensaje=mensaje
-    )
-
-    await update.message.reply_text("✅ ¡Gracias! Tu mensaje fue guardado.")
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Operación cancelada. Volvé al menú con /start")
-    return ConversationHandler.END
-
-if __name__ == '__main__':
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(button_handler)],
-        states={
-            ESPERANDO_CONTACTO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_contacto)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-        allow_reentry=True,
-    )
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(conv_handler)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    app.run_polling()
+if __name__ == "__main__":
+    main()
