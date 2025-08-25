@@ -3,6 +3,7 @@ import logging
 from dotenv import load_dotenv 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from simulated_data import get_jira_status
 
 # Configuración básica del logging para ver errores en la terminal
 logging.basicConfig(
