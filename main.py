@@ -1,15 +1,15 @@
 import os
 import logging
 from dotenv import load_dotenv 
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove # <-- NUEVA IMPORTACIÓN
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-    ConversationHandler,
-)
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import Application, ContextTypes, MessageHandler, filters, CommandHandler, ConversationHandler
+
+# --- IMPORTACIONES DE MÓDULOS ---
+# Importa los ConversationHandlers completos desde los otros archivos
+from contact_form import contact_form_handler
+from cv_handler import cv_conversation_handler
+
+# Importar el handler de tickets simulados (asume que simulated_data.py existe)
 from simulated_data import get_jira_status
 
 # --- 1. CONFIGURACIÓN ---
@@ -18,9 +18,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Definición de estados para el formulario
-GET_NAME, GET_EMAIL, GET_CHALLENGE = range(3)
-
 # --- 2. HANDLERS DE COMANDOS Y MENÚ ---
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -28,9 +25,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user = update.effective_user.first_name if update.effective_user else "Estimado Usuario"
     
     keyboard = [
-        [KeyboardButton("📊 Análisis de Datos")],
-        [KeyboardButton("⚙️ Admin. de Plataformas")],
-        [KeyboardButton("✉️ Solicitar Consultoría")]
+        [KeyboardButton("📊 Análisis de Datos"), KeyboardButton("⚙️ Admin. de Plataformas")],
+        [KeyboardButton("✉️ Solicitar Consultoría"), KeyboardButton("📄 Explorar mi CV")]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
     
@@ -39,89 +35,28 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "Selecciona una opción para comenzar a explorar mis servicios y experiencia."
     )
     
-    await update.message.reply_text(welcome_message, reply_markup=reply_markup)
+    if update.message:
+        await update.message.reply_text(welcome_message, reply_markup=reply_markup)
+    elif update.callback_query:
+        await update.callback_query.edit_message_text(welcome_message, reply_markup=reply_markup)
 
-# --- 3. HANDLERS DEL FORMULARIO DE CONTACTO (ConversationHandler) ---
+# --- 3. HANDLER PARA MENSAJES DE TEXTO (maneja lógicas secundarias y tickets) ---
 
-async def start_contact_form(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Punto de entrada. Inicia el formulario y pide el nombre."""
-    # Opcional: Remover teclado si se usa el botón.
-    await update.message.reply_text("¡Excelente! Vamos a comenzar con tu solicitud. ¿Cuál es tu nombre?", reply_markup=ReplyKeyboardRemove())
-    return GET_NAME
-
-async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Captura el nombre y pide el email."""
-    context.user_data['name'] = update.message.text
-    await update.message.reply_text(f"Hola, {context.user_data['name']}. Ahora, ¿cuál es tu email para que pueda contactarte?")
-    return GET_EMAIL
-
-async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Captura el email y pide el desafío de negocio."""
-    user_email = update.message.text
-    # Validación básica
-    if "@" not in user_email or "." not in user_email:
-        await update.message.reply_text("Eso no parece un email válido. Intenta de nuevo:")
-        return GET_EMAIL 
-
-    context.user_data['email'] = user_email
-    await update.message.reply_text("¡Listo! Para entender mejor, ¿cuál es el desafío principal que quieres resolver con la consultoría?")
-    return GET_CHALLENGE
-
-async def get_challenge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Captura el desafío y finaliza el formulario."""
-    context.user_data['challenge'] = update.message.text
-    
-    summary = (
-        f"✅ **Solicitud de Consultoría Recibida**\n"
-        f"👤 Nombre: {context.user_data.get('name', 'N/A')}\n"
-        f"📧 Email: {context.user_data.get('email', 'N/A')}\n"
-        f"📝 Desafío: {context.user_data['challenge']}"
-    )
-    
-    await update.message.reply_markdown(summary)
-    await update.message.reply_text(
-        "¡Gracias! He recibido tu solicitud. Te contactaré a la brevedad para discutir los detalles."
-    )
-    
-    # Después de finalizar, volvemos a mostrar el menú principal
-    await start_command(update, context) 
-
-    context.user_data.clear()
-    return ConversationHandler.END 
-
-async def cancel_form(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancela el formulario."""
-    await update.message.reply_text("Formulario de contacto cancelado. ¡Cuando quieras, usa /start para comenzar de nuevo!")
-    context.user_data.clear()
-    return ConversationHandler.END 
-
-# --- 4. HANDLER PARA MENSAJES DE TEXTO ---
-
-async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Maneja los mensajes de texto, incluyendo botones y la consulta de tickets."""
+async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Maneja los mensajes de texto que no son parte de una conversación activa."""
     text = update.message.text
 
     if text == "📊 Análisis de Datos":
-        response = (
-            "Módulo de Análisis de Datos seleccionado.\n\n"
-            "Mis herramientas clave: **Power BI**, **Excel** (avanzado), **SQL** y **Python**.\n\n"
-            "Pronto: Podrás probar mi simulador de consultas SQL/Python."
-        )
+        response = "Módulo de Análisis de Datos seleccionado.\n\nMis herramientas clave: **Power BI**, **Excel** (avanzado), **SQL** y **Python**."
         await update.message.reply_text(response)
-        # Volvemos al menú principal
-        await start_command(update, context) 
-        return
+        return ConversationHandler.END 
         
     elif text == "⚙️ Admin. de Plataformas":
-        # QUITAMOS el menú de botones para que el usuario pueda escribir el ID
         await update.message.reply_text(
-            "Módulo de Administración seleccionado. ¡Aquí demuestro mi dominio en las APIs de Jira, HubSpot y Teamwork!\n\n"
-            "Ingresa un ID de ticket de prueba (ej: **DATABOT-101** o **JIRA-205**) para consultar su estado simulado.",
-            reply_markup=ReplyKeyboardRemove() # <--- Oculta el teclado
+            "Módulo de Administración seleccionado. ¡Aquí demuestro mi dominio en las APIs de Jira, HubSpot y Teamwork!\n\nIngresa un ID de ticket de prueba (ej: **DATABOT-101** o **JIRA-205**) para consultar su estado simulado."
         )
-        return
+        return ConversationHandler.END
 
-    # LÓGICA DE CONSULTA DE TICKET SIMULADO
     if len(text) <= 15 and '-' in text and not text.startswith('/'):
         ticket_info = get_jira_status(text)
         
@@ -139,14 +74,12 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             response = f"Ticket ID '{text}' no encontrado en la base de datos simulada."
             await update.message.reply_text(response)
         
-        # Después de la consulta, volvemos a mostrar el menú principal
-        await start_command(update, context) 
-        return
+        return ConversationHandler.END
 
-    # RESPUESTA POR DEFECTO
     await update.message.reply_text("Lo siento, no entendí ese mensaje. Usa /start para ver el menú principal.")
+    return ConversationHandler.END
 
-# --- 5. FUNCIÓN PRINCIPAL (MAIN) ---
+# --- 4. FUNCIÓN PRINCIPAL (MAIN) ---
 
 def main() -> None:
     """Configura y ejecuta el bot."""
@@ -160,25 +93,12 @@ def main() -> None:
 
     application = Application.builder().token(token).build() 
 
-    # Handler para el comando /start
+    # Añadir handlers a la aplicación. Ya vienen configurados desde sus módulos.
     application.add_handler(CommandHandler("start", start_command))
-    
-    # Handler para el formulario de contacto (ConversationHandler)
-    contact_handler = ConversationHandler(
-        # Inicia la conversación cuando el usuario hace click en el botón
-        entry_points=[MessageHandler(filters.Regex("^(✉️ Solicitar Consultoría)$"), start_contact_form)], 
-        states={
-            GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
-            GET_EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_email)],
-            GET_CHALLENGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_challenge)],
-        },
-        # Comando para salir del formulario en cualquier momento
-        fallbacks=[CommandHandler("cancelar", cancel_form)], 
-    )
+    application.add_handler(contact_form_handler)
+    application.add_handler(cv_conversation_handler)
 
-    application.add_handler(contact_handler)
-
-    # Handler de mensajes de texto (para los demás botones y tickets)
+    # Este manejador debe ir al final, para capturar mensajes que no inician o siguen una conversación
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
 
     print("Bot Iniciado. Buscando actualizaciones... (Ctrl+C para detener)")
