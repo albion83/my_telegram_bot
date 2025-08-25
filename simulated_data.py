@@ -30,8 +30,7 @@ JIRA_TICKETS = [
 
 def get_jira_status(ticket_id: str) -> dict | None:
     """Busca y retorna la información de un ticket simulado.
-
-    Simula una consulta SQL o una llamada a la API buscando en la lista interna.
+    Simula una consulta SQL o una llamada a la API.
     """
     ticket_id = ticket_id.upper() # Normaliza el ID a mayúsculas
     

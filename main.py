@@ -3,9 +3,9 @@ import logging
 from dotenv import load_dotenv 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
-from simulated_data import get_jira_status
+from simulated_data import get_jira_status # <--- ¡Importación de la función de consulta!
 
-# Configuración básica del logging para ver errores en la terminal
+# Configuración básica del logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -23,7 +23,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         [KeyboardButton("⚙️ Admin. de Plataformas")],
         [KeyboardButton("✉️ Solicitar Consultoría (/contacto)")]
     ]
-    # resize_keyboard=True ajusta el tamaño, one_time_keyboard=False lo mantiene
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
     
     welcome_message = (
@@ -34,7 +33,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_text(welcome_message, reply_markup=reply_markup)
 
 async def contacto_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Información de contacto (o inicio del formulario de leads)."""
+    """Información de contacto."""
     message = (
         "¡Excelente! Para una consulta detallada, contáctame directamente.\n\n"
         "🔗 **LinkedIn:** [Pega tu Enlace de LinkedIn aquí]\n"
@@ -44,34 +43,58 @@ async def contacto_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text(message)
 
 async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Maneja los mensajes de texto que no son comandos, incluyendo los de los botones."""
+    """Maneja los mensajes de texto, incluyendo botones y la consulta de tickets."""
     text = update.message.text
-    response = ""
     
+    # --- 1. LÓGICA DE RESPUESTA A BOTONES ---
     if text == "📊 Análisis de Datos":
         response = (
             "Módulo de Análisis de Datos seleccionado.\n\n"
             "Mis herramientas clave: **Power BI**, **Excel** (avanzado), **SQL** y **Python**.\n\n"
             "Pronto: Podrás probar mi simulador de consultas SQL/Python."
         )
+        await update.message.reply_text(response)
+        return
+        
     elif text == "⚙️ Admin. de Plataformas":
-        response = (
-            "Módulo de Administración seleccionado.\n\n"
-            "Mis herramientas clave: **Jira**, **HubSpot**, **Teamwork** y sus APIs.\n\n"
-            "Pronto: Podrás consultar el estado de tickets/contactos simulados."
+        # Respuesta que solicita el ID de ticket
+        await update.message.reply_text(
+            "Módulo de Administración seleccionado. ¡Aquí demuestro mi dominio en las APIs de Jira, HubSpot y Teamwork!\n\n"
+            "Ingresa un ID de ticket de prueba (ej: **DATABOT-101** o **JIRA-205**) para consultar su estado simulado."
         )
+        return
+
     elif "Solicitar Consultoría" in text:
-        # Si hacen clic en el botón de contacto, llamamos a la función
         await contacto_command(update, context)
         return
-    else:
-        # Respuesta por defecto para texto que no se reconoce
-        response = "Lo siento, no entendí ese mensaje. Usa /start para ver el menú principal."
 
-    await update.message.reply_text(response)
+    # --- 2. LÓGICA DE CONSULTA DE TICKET SIMULADO (Fase 2) ---
+    # Patrón: Contiene un '-' (guion), no es demasiado largo (<=15 caracteres), y no empieza por '/' (comando).
+    if len(text) <= 15 and '-' in text and not text.startswith('/'):
+        
+        ticket_info = get_jira_status(text)
+        
+        if ticket_info:
+            response = (
+                f"✅ **Ticket Simulador Encontrado (Demo Jira)**\n"
+                f"ID: `{ticket_info['ticket_id']}`\n"
+                f"Resumen: {ticket_info['summary']}\n"
+                f"Estado: **{ticket_info['status']}**\n"
+                f"Prioridad: {ticket_info['priority']}\n"
+                f"Asignado: {ticket_info['assigned_to']}"
+            )
+            await update.message.reply_markdown(response)
+            return
+        else:
+            response = f"Ticket ID '{text}' no encontrado en la base de datos simulada."
+            await update.message.reply_text(response)
+            return
+
+    # --- 3. RESPUESTA POR DEFECTO ---
+    await update.message.reply_text("Lo siento, no entendí ese mensaje. Usa /start para ver el menú principal.")
 
 
-# --- 2. FUNCIÓN PRINCIPAL (MAIN) ---
+# --- 4. FUNCIÓN PRINCIPAL (MAIN) ---
 
 def main() -> None:
     """Configura y ejecuta el bot."""
@@ -95,7 +118,7 @@ def main() -> None:
     # Escucha cualquier mensaje de texto que NO sea un comando (/start, /contacto, etc.)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_messages))
 
-    # 4. Inicia el bot (Modo Long Polling para desarrollo local)
+    # 4. Inicia el bot
     print("Bot Iniciado. Buscando actualizaciones... (Ctrl+C para detener)")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
